@@ -11,7 +11,8 @@ UTILS = os.path.join(os.path.dirname(__file__), "utils")
 if UTILS not in sys.path:
     sys.path.insert(0, UTILS)
 
-from utils.run_exp_greedy_sepNMF import run_exp_greedy_sepNMF
+# from utils.run_exp_greedy_sepNMF import run_exp_greedy_sepNMF 
+from utils.run_exp_greedy_sepNMF_srrqr import run_exp_greedy_sepNMF
 from utils.scriptfigsepNMF import scriptfigsepNMF
 from utils.silence_warnings import silence_numpy_warnings
 
@@ -22,8 +23,8 @@ def main():
     seed = 2020
     m, r, n = 40, 20, 200
     condW = 6
-    nummat = 2
-    nalgo = [1, 2, 3, 4, 5, 6]  # SPA, VCA, FAW, SNPA, MVE-SPA, SPA-SPA
+    nummat = 10
+    nalgo = [1, 4, 6, 7, 8, 9, 10, 11, 12]  # SPA, SNPA, SPA-SPA, QRCP, SRRQR variants    
     diri = 1.0  # larger than 0.5 due to smaller m
     numnoiselevels = 20
     rng = np.random.default_rng(seed)
