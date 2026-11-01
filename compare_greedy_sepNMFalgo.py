@@ -2,6 +2,7 @@ import os, pickle
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Union
 import numpy as np
+import pandas as pd 
 
 from modules import (
     scriptfigsepNMF,
@@ -94,7 +95,33 @@ class ExperimentResult:
         ]
         for name, row, t in zip(self.names, self.results, self.timings):
             lines.append(f"{name:{w}}{row.mean():14.3f}{t:10.2f}")
-        return "\n".join(lines)
+        return "\n".join(lines) 
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        Long format: one row per (algorithm, noise level).
+        Columns: xp, experiment, algo_code, algo, delta_idx, delta, accuracy,
+                exact, swaps, total_cpu_s.
+        """
+        details = self.details or {}
+        exact = details.get("exact")
+        swaps = details.get("swaps")
+        rows = []
+        for a, (code, name) in enumerate(zip(self.nalgo, self.names)):
+            for i, d in enumerate(self.config.delta):
+                rows.append({
+                    "xp": self.config.xp,
+                    "experiment": self.config.title,
+                    "algo_code": code,
+                    "algo": name,
+                    "delta_idx": i,
+                    "delta": float(d),
+                    "accuracy": float(self.results[a, i]),
+                    "exact": float(exact[a, i]) if exact is not None else np.nan,
+                    "swaps": float(swaps[a, i]) if swaps is not None else np.nan,
+                    "total_cpu_s": float(self.timings[a]),
+                })
+        return pd.DataFrame(rows)
 
 
 @dataclass
@@ -109,6 +136,101 @@ class StudyResults:
 
     def summary(self) -> str:
         return "\n\n".join(e.summary() for e in self.experiments.values())
+
+    def to_dataframe(self, include_settings: bool = True) -> pd.DataFrame:
+        """All experiments stacked into one long DataFrame (one row per algo x noise level)."""
+        frames = [e.to_dataframe() for e in self.experiments.values()]
+        df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        if include_settings and not df.empty:
+            for key in (
+                "m",
+                "r",
+                "n",
+                "condW",
+                "nummat",
+                "diri",
+                "seed",
+                "paired_trials",
+            ):
+                if key in self.settings:
+                    df[key] = self.settings[key]
+        return df
+
+    def summary_dataframe(self) -> pd.DataFrame:
+        """One row per (experiment, algorithm): mean accuracy, robustness and time."""
+        df = self.to_dataframe(include_settings=False)
+
+        def max_delta(g: pd.DataFrame, level: float) -> float:
+            # Largest delta before accuracy first drops below `level` (book's Table 7.2).
+            g = g.sort_values("delta")
+            ok = (g["accuracy"] >= level - 1e-12).to_numpy()
+            if not ok[0]:
+                return 0.0
+            first_fail = np.argmin(ok) if not ok.all() else len(ok)
+            return float(g["delta"].iloc[first_fail - 1])
+
+        rows = []
+        for (xp, title, code, name), g in df.groupby(
+            ["xp", "experiment", "algo_code", "algo"], sort=False
+        ):
+            rows.append(
+                {
+                    "xp": xp,
+                    "experiment": title,
+                    "algo_code": code,
+                    "algo": name,
+                    "mean_accuracy": g["accuracy"].mean(),
+                    "max_delta_100": max_delta(g, 1.0),
+                    "max_delta_95": max_delta(g, 0.95),
+                    "mean_swaps": g["swaps"].mean(),
+                    "total_cpu_s": g["total_cpu_s"].iloc[0],
+                }
+            )
+        return pd.DataFrame(rows)
+
+
+    def _write_table(
+        self, 
+        df: pd.DataFrame,
+        path: str,
+        sheet_name: str = "results",
+        extra_sheets: Optional[Dict[str, pd.DataFrame]] = None,
+    ) -> None:
+        """Write a DataFrame, choosing the format from the file extension."""
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        ext = os.path.splitext(path)[1].lower()
+        if ext == ".csv":
+            df.to_csv(path, index=False)
+        elif ext == ".parquet":
+            df.to_parquet(path, index=False)
+        elif ext == ".xlsx":
+            with pd.ExcelWriter(path) as writer:
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                for name, extra in (extra_sheets or {}).items():
+                    extra.to_excel(writer, sheet_name=name, index=False)
+        elif ext in (".pkl", ".pickle"):
+            df.to_pickle(path)
+        else:
+            raise ValueError(
+                f"Unsupported extension {ext!r}; use .csv, .parquet, .xlsx or .pkl"
+            )
+
+    def save_dataframe(self, path: str) -> pd.DataFrame:
+        """Save the full long table (.csv, .parquet, .xlsx, .pkl). An .xlsx also gets a summary sheet."""
+        df = self.to_dataframe()
+        extra = {"summary": self.summary_dataframe()} if path.lower().endswith(".xlsx") else None
+        self._write_table(df, path, sheet_name="results", extra_sheets=extra)
+        return df
+
+    def save_summary(self, path: str, include_settings: bool = True) -> pd.DataFrame:
+        """Save only the per-(experiment, algorithm) summary (.csv, .parquet, .xlsx, .pkl)."""
+        df = self.summary_dataframe()
+        if include_settings:
+            for key in ("m", "r", "n", "condW", "nummat", "diri", "seed", "paired_trials"):
+                if key in self.settings:
+                    df[key] = self.settings[key]
+        self._write_table(df, path, sheet_name="summary")
+        return df
 
     def to_dict(self) -> dict:
         """Plain dicts and arrays only, so the file loads without this module."""
@@ -162,6 +284,8 @@ def main(
     paired_trials: bool = False,  # True: trial t uses seed + t at every noise level
     figs: Optional[str] = "./exports/base/",  # None: no plots
     save_path: Optional[str] = None,  # e.g. "./exports/base/results.pkl"
+    df_path: Optional[str] = None, 
+    summary_path: Optional[str] = None, 
     verbose: bool = True,
 ) -> StudyResults:
     silence_numpy_warnings()
@@ -221,6 +345,15 @@ def main(
         study.save(save_path)
         if verbose:
             print(f"Saved results to {save_path}")
+
+    if df_path is not None:
+        study.save_dataframe(df_path)
+        if verbose:
+            print(f"Saved results table to {df_path}") 
+    if summary_path is not None:
+        study.save_summary(summary_path)
+        if verbose:
+            print(f"Saved summary to {summary_path}")
     return study
 
 
@@ -244,17 +377,18 @@ if __name__ == "__main__":
         r=20,
         n=200,
         condW=6,
-        nummat=10,
-        # Codes, names or groups ("all", "baseline", "fast", "srrqr"), mixed freely.
-        algos=[1, 2, 3, 4, 5, 6],
-        diri=1.0,
-        numnoiselevels=20,
+        nummat=20,
+        # algos=[1, 2, 3, 5, 6], # base
+        algos=[1, 6, 7, 8, 9, 10, 11, 12],  # exp
+        diri=0.5,
+        numnoiselevels=30,
         xps=[1, 2, 3, 4],
         deltas=None,  # e.g. {3: np.logspace(-6, -2, 10)} to override a noise grid
         seed=2020,
         paired_trials=False,
-        figs="./exports/base/",
-        save_path=None,
+        figs="./exports/w44/",
+        df_path="./exports/w44/study_results.xlsx",
+        summary_path="./exports/w44/study_sum.xlsx",
         verbose=True,
     )
     print("Done.")

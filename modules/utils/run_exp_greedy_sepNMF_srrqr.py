@@ -2,6 +2,7 @@ import time
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 from numpy.typing import NDArray
+from tqdm import tqdm
 
 from . import snpa_matlab, SNPAOptions, SPAOptions, spa_matlab, vca_light, faw_light
 from modules.utils.synthdatasetSepNMF import synthdatasetSepNMF
@@ -24,12 +25,12 @@ ALGO_NAMES: Dict[int, str] = {
 
 # code -> (f, normalize, precondition)
 SRRQR_VARIANTS: Dict[int, Tuple[float, bool, bool]] = {
-    7: (np.inf, True, False),
-    8: (1.01, True, False),
-    9: (1.1, True, False),
-    10: (2.0, True, False),
+    7: (np.inf, False, False),
+    8: (1.01, False, False),
+    9: (1.1, False, False),
+    10: (2.0, False, False),
     11: (1.01, False, False),
-    12: (1.01, True, True),
+    12: (1.01, False, True),
 }
 
 
@@ -40,7 +41,7 @@ def _l1_normalize(X: np.ndarray) -> np.ndarray:
     return X / (X.sum(axis=0, keepdims=True) + 1e-16)
 
 
-def _spa(X: np.ndarray, r: int, normalize: int = 1) -> List[int]:
+def _spa(X: np.ndarray, r: int, normalize: int = 0) -> List[int]:
     return [
         int(k) for k in spa_matlab(X, r, SPAOptions(normalize=normalize, display=0))
     ]
@@ -67,7 +68,7 @@ def srrqr_indices(
     X: np.ndarray,
     r: int,
     f: float = 1.01,
-    normalize: bool = True,
+    normalize: bool = False,
     precondition: bool = False,
 ) -> Tuple[List[int], int]:
     """Column selection K = P[:r] from a strong RRQR stopped at rank r. Returns (K, n_swaps)."""
@@ -120,7 +121,7 @@ def run_exp_greedy_sepNMF(
     failures = np.zeros((na,), dtype=int)
 
     print(f"Total number of noise levels: {nd:2.0f} ")
-    for i, d in enumerate(delta):
+    for i, d in tqdm(enumerate(delta), total=len(delta)):
         for t in range(nummat):
             if seed is not None:
                 np.random.seed(seed + t)
@@ -171,17 +172,6 @@ def run_exp_greedy_sepNMF(
                 exact[aidx, i] += (hits == r) / nummat
                 if n_swaps is not None:
                     swap_sum[aidx, i] += n_swaps / nummat
-
-        print(f"{i+1}...", end="", flush=True)
-        if (i + 1) % 10 == 0:
-            print()
-    print()
-
-    if failures.any():
-        print(
-            "Failures:", {ALGO_NAMES[a]: int(c) for a, c in zip(nalgo, failures) if c}
-        )
-
     if not return_details:
         return results, timings
 
