@@ -20,12 +20,10 @@ Optional keyword arguments (the driver script does not need them):
                          mean SRRQR swaps and failure counts.
 """
 
-from __future__ import annotations
-
 import time
 from typing import Dict, List, Optional, Tuple
-
 import numpy as np
+from numpy.typing import NDArray
 
 from modules.algorithms.separable_nmf.spa_matlab import spa_matlab, SPAOptions
 from modules.algorithms.separable_nmf.snpa_matlab import snpa_matlab, SNPAOptions
@@ -122,7 +120,7 @@ def run_exp_greedy_sepNMF(
     diri: float,
     seed: Optional[int] = None,
     return_details: bool = False,
-):
+) -> Tuple[NDArray, NDArray]:
     unknown = [a for a in nalgo if a not in ALGO_NAMES]
     if unknown:
         raise ValueError(

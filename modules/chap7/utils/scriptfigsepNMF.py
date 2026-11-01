@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import os
-from typing import List
+from typing import List, Dict
 
 import numpy as np
 import matplotlib
@@ -39,6 +37,12 @@ MARKERS = {
     11: "<--",
     12: ">--",
 }
+EXPERIMENTS: Dict[int, str] = {
+    1: "dd_well_cond",
+    2: "mp_well_cond",
+    3: "dd_ill_cond",
+    4: "mp_ill_cond",
+}
 
 
 def scriptfigsepNMF(
@@ -48,6 +52,7 @@ def scriptfigsepNMF(
     nalgo: List[int],
     xp: int,
     figs_dir: str,
+    title: str, 
 ) -> None:
     """
     Plot success rate vs noise level for selected algorithms.
@@ -59,7 +64,7 @@ def scriptfigsepNMF(
     # including codes without a predefined label.
     for idx, a in enumerate(nalgo):
         lab = LABELS.get(a, f"algo {a}")
-        plt.plot(delta, results[idx, :], MARKERS.get(a, "-"), label=lab, markersize=5)
+        plt.plot(delta, results[idx, :], MARKERS.get(a, "-"), label=lab, markersize=5, alpha=0.5)
 
     # Log-spaced noise levels (experiments 3 and 4) read better on a log x-axis.
     if delta.min() > 0 and delta.max() / delta.min() > 100:
@@ -67,12 +72,13 @@ def scriptfigsepNMF(
 
     plt.xlabel("noise level (delta)")
     plt.ylabel("success rate")
+    plt.title(title)
     plt.ylim(0, 1.05)
     plt.grid(True, which="both", alpha=0.3)
     # With up to 12 methods the legend goes outside the axes so it doesn't cover the curves.
     plt.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=8)
     os.makedirs(figs_dir, exist_ok=True)
-    out = os.path.join(figs_dir, f"ch7_sepNMF_compare_xp{xp}.pdf")
+    out = os.path.join(figs_dir, f"gns_nmf_{EXPERIMENTS[xp]}.pdf")
     plt.tight_layout()
     plt.savefig(out, bbox_inches="tight")
     plt.close()
