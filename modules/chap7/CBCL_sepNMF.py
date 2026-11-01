@@ -14,7 +14,7 @@ if BASE not in sys.path:
 from algorithms.separable_nmf.spa_matlab import spa_matlab, SPAOptions
 from algorithms.separable_nmf.snpa_matlab import _nnls_fpgm, SNPAOptions
 from utils.affichage import affichage
-from utils.silence_warnings import silence_numpy_warnings
+from modules.utils.silence_warnings import silence_numpy_warnings
 
 
 def main():

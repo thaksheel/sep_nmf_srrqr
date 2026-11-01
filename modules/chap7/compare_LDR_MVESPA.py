@@ -11,9 +11,9 @@ UTILS = os.path.join(os.path.dirname(__file__), "utils")
 if UTILS not in sys.path:
     sys.path.insert(0, UTILS)
 
-from utils.run_exp_greedy_sepNMF import run_exp_greedy_sepNMF
-from utils.scriptfigsepNMF import scriptfigsepNMF
-from utils.silence_warnings import silence_numpy_warnings
+from modules.utils.run_exp_greedy_sepNMF import run_exp_greedy_sepNMF
+from modules.utils.scriptfigsepNMF import scriptfigsepNMF
+from modules.utils.silence_warnings import silence_numpy_warnings
 
 
 def main():

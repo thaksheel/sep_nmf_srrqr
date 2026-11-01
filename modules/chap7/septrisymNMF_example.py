@@ -9,7 +9,7 @@ if BASE not in sys.path:
     sys.path.insert(0, BASE)
 
 from algorithms.separable_nmf.septrisym_nmf import septrisym_nmf
-from utils.silence_warnings import silence_numpy_warnings
+from modules.utils.silence_warnings import silence_numpy_warnings
 
 
 def main():

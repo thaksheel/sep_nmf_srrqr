@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Union
 import numpy as np
 
-from utils.run_exp_greedy_sepNMF_srrqr import run_exp_greedy_sepNMF, ALGO_NAMES
-from utils.scriptfigsepNMF import scriptfigsepNMF
-from utils.silence_warnings import silence_numpy_warnings
+from ..utils.run_exp_greedy_sepNMF_srrqr import run_exp_greedy_sepNMF, ALGO_NAMES
+from ..utils.scriptfigsepNMF import scriptfigsepNMF
+from ..utils.silence_warnings import silence_numpy_warnings
 
 ALGO_GROUPS: Dict[str, List[int]] = {
     "all": sorted(ALGO_NAMES),
@@ -222,6 +222,20 @@ def main(
 
 
 if __name__ == "__main__":
+    ALGO_NAMES: Dict[int, str] = {
+        1: "SPA",
+        2: "VCA",
+        3: "FAW",
+        4: "SNPA",
+        5: "MVE-SPA",
+        6: "SPA-SPA",
+        7: "QRCP",
+        8: "SRRQR f=1.01",
+        9: "SRRQR f=1.1",
+        10: "SRRQR f=2",
+        11: "SRRQR f=1.01 raw",
+        12: "SPA-SRRQR f=1.01",
+    }
     study = main(
         m=40,
         r=20,
@@ -229,7 +243,7 @@ if __name__ == "__main__":
         condW=6,
         nummat=10,
         # Codes, names or groups ("all", "baseline", "fast", "srrqr"), mixed freely.
-        algos=[1, 6, 7, 8, 9, 10, 11, 12],
+        algos=[1, 2, 3, 4, 5, 6],
         diri=1.0,
         numnoiselevels=20,
         xps=[1, 2, 3, 4],
