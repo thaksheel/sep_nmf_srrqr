@@ -130,11 +130,31 @@ class SRRQR(Selector):
 
 
 # ----------------------------------------------------------------------- Precond
+def mve_transform(X: Matrix, r: int, tol: float = 1e-3, max_iter: int = 5000) -> Matrix:
+    """Project onto the top-r subspace, then map the minimum-volume centered ellipsoid
+    containing the columns to the unit ball (Khachiyan / Todd iterations)."""
+    Y = np.linalg.svd(X, full_matrices=False)[0][:, :r].T @ X
+    n = Y.shape[1]
+    u = np.full(n, 1.0 / n)
+    for _ in range(max_iter):
+        M = (Y * u) @ Y.T
+        g = np.sum(Y * np.linalg.solve(M, Y), axis=0)
+        j = int(np.argmax(g))
+        if g[j] <= r * (1 + tol):
+            break
+        step = (g[j] / r - 1) / (g[j] - 1)
+        u *= 1 - step
+        u[j] += step
+    A = np.linalg.inv((Y * u) @ Y.T) / r
+    return np.linalg.cholesky(A).T @ Y
+
+
 @dataclass
 class PrecondConfig:
     kind: str = (
-        "pinv"  # "pinv": pinv(X[:, K0]) with K0 from `first`; "svd": project onto top-r singular vectors
+        "pinv"  # "pinv": pinv(X[:, K0]) with K0 from `first`; "svd": top-r subspace; "mve": min-volume ellipsoid
     )
+    mve_tol: float = 1e-3
 
 
 class Precond(Selector):
@@ -148,10 +168,12 @@ class Precond(Selector):
     ):
         self.method, self.first = method, first or SPA()
         self.cfg = cfg or PrecondConfig()
-        prefix = "SVD" if self.cfg.kind == "svd" else self.first.name
+        prefix = {"svd": "SVD", "mve": "MVE"}.get(self.cfg.kind, self.first.name)
         self.name = f"{prefix}-{method.name}"
 
     def transform(self, X: Matrix, r: int) -> Matrix:
+        if self.cfg.kind == "mve":
+            return mve_transform(X, r, self.cfg.mve_tol)
         if self.cfg.kind == "svd":
             U = np.linalg.svd(X, full_matrices=False)[0]
             return U[:, :r].T @ X
@@ -160,3 +182,42 @@ class Precond(Selector):
 
     def select(self, X: Matrix, r: int) -> Selection:
         return self.method.select(self.transform(X, r), r)
+
+
+# --------------------------------------------------------------------------- VCA
+def _normalize(X: Matrix, norm: str) -> Matrix:
+    if norm == "l2":
+        return X / (np.linalg.norm(X, axis=0, keepdims=True) + 1e-16)
+    if norm == "l1":
+        return X / (np.sum(np.abs(X), axis=0, keepdims=True) + 1e-16)
+    return X
+
+
+@dataclass
+class VCAConfig:
+    normalize: str = "none"  # "none", "l1" or "l2"
+    seed: int = 0
+
+
+class VCA(Selector):
+    """Vertex component analysis: project onto the top-r subspace, then pick argmax |f^T x|
+    for random directions f orthogonal to the columns already selected (Nascimento & Bioucas-Dias).
+    """
+
+    def __init__(self, cfg: VCAConfig | None = None):
+        self.cfg = cfg or VCAConfig()
+        self.name = "VCA"
+
+    def select(self, X: Matrix, r: int) -> Selection:
+        Y = _normalize(X, self.cfg.normalize)
+        Y = np.linalg.svd(Y, full_matrices=False)[0][:, :r].T @ Y
+        rng = np.random.default_rng(self.cfg.seed)
+        A = np.zeros((r, 0))
+        K: list[int] = []
+        for _ in range(r):
+            w = rng.standard_normal(r)
+            f = w - A @ np.linalg.lstsq(A, w, rcond=None)[0] if A.shape[1] else w
+            k = int(np.argmax(np.abs((f / np.linalg.norm(f)) @ Y)))
+            K.append(k)
+            A = np.column_stack([A, Y[:, k]])
+        return Selection(np.array(K, dtype=np.int64))

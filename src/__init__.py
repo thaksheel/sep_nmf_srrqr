@@ -18,6 +18,8 @@ from .methods import (
     SNPAConfig,
     SPAConfig,
     SRRQRConfig,
+    VCA, 
+    VCAConfig, 
 )
 from .presets import book_experiments
 from .qr import strong_rrqr
