@@ -1,4 +1,4 @@
-# sepnmf: separable NMF with strong rank-revealing QR
+# Separable NMF with strong rank-revealing QR
 
 Code for studying **strong rank-revealing QR (SRRQR)** as a column-selection method for
 separable NMF, compared with SPA, FAW and SNPA.
